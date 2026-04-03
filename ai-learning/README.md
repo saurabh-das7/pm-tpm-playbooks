@@ -1,1 +1,1 @@
-ai-learning
+Notes, reflections, mini builds from AI courses
