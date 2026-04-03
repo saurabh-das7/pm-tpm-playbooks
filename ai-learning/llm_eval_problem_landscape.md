@@ -172,4 +172,4 @@ A mature LLM eval practice addresses all six. Most teams are still working on Pr
 
 ---
 
-*Written as part of my public AI learning journey. I am a Senior TPM and Designated PM at Microsoft AI, documenting what I learn while building real AI products. See the `llm-eval-toolkit` repo for a hands-on project applying these concepts.*
+*Written as part of my public AI learning journey. I am a Senior TPM at Microsoft AI, documenting what I learn while building real AI products. See the `llm-eval-toolkit` repo for a hands-on project applying these concepts.*
