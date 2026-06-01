@@ -1,6 +1,7 @@
 # Choosing an LLM API for a Solo Build — A PM's Practical Guide
 
-*Part of my AI Learning Journey | Last updated: April 2026*
+*Part of my AI Learning Journey | Last updated: May 2026*
+*Updated with real-world findings from two projects: llm-eval-toolkit (Search Ad Copy Evaluator) and llm-issue-categorizer (Operational Ticket Categoriser)*
 
 ---
 
@@ -15,7 +16,7 @@ Solo builders face a different set of constraints:
 - **Public URL is required** — the whole point is a shareable demo, not something that only runs on your laptop
 - **Time is limited** — you have evenings and weekends, not sprints
 
-This guide maps the decision space for choosing an LLM API under these constraints, based on real evaluation done while building an ad copy evaluation tool in April 2026.
+This guide maps the decision space for choosing an LLM API under these constraints, based on real experience building two tools across two months. The most important finding: **documented free tier limits and actual free tier limits are not the same thing.** Verify in AI Studio before committing to a model.
 
 ---
 
@@ -56,24 +57,32 @@ Workarounds exist but all have problems:
 
 ### Category 2 — Free Cloud API Tiers
 
-Several major providers offer genuinely free API access in 2026, no credit card required. The landscape as of April 2026:
+Several major providers offer genuinely free API access in 2026, no credit card required. The landscape as of May 2026:
 
-| Provider | Free model | Req/day | Req/min | Credit card needed |
-|----------|-----------|---------|---------|-------------------|
-| Google Gemini (Flash-Lite) | Gemini 2.5 Flash-Lite | 1,000 | 15 | No |
-| Google Gemini (Flash) | Gemini 2.5 Flash | 250 | 10 | No |
-| Google Gemini (Pro) | Gemini 2.5 Pro | 100 | 5 | No |
-| Groq | Llama 4, Mixtral | ~14,400 | varies | No |
-| OpenAI | GPT-4o Mini | ~limited | low | Yes (with expiring credits) |
-| Anthropic (Claude) | — | — | — | Yes (with expiring $5 credits) |
+| Provider | Free model | Documented RPD | Actual RPD (new projects) | RPM | Credit card |
+|----------|-----------|---------------|--------------------------|-----|-------------|
+| Google Gemini (Flash-Lite 2.5) | Gemini 2.5 Flash-Lite | 1,000 | **~20** ⚠️ | 15 | No |
+| Google Gemini (Flash-Lite 3.1) | Gemini 3.1 Flash-Lite | 500 | **500** ✅ confirmed | 15 | No |
+| Google Gemini (Flash 2.5) | Gemini 2.5 Flash | 500 | ~20 ⚠️ | 10 | No |
+| Groq | Llama 4, Mixtral | ~14,400 | ~14,400 ✅ | varies | No |
+| OpenAI | GPT-4o Mini | ~limited | limited | low | Yes (expiring credits) |
+| Anthropic (Claude) | — | — | — | — | Yes (expiring $5 credits) |
 
 **Key observations:**
 
-Google is the most practical free-tier provider for solo builders. No credit card, generous daily limits for low-volume apps, and the API is OpenAI-compatible — meaning the code change from any other provider is minimal (swap base URL and key).
+Google is the most practical free-tier provider for solo builders. No credit card, no billing, and the API is OpenAI-compatible — meaning the code change from any other provider is minimal (swap base URL and key).
+
+However, **the Gemini 2.5 series has a much tighter introductory quota than documented.** During llm-eval-toolkit batch testing, `gemini-2.5-flash-lite` returned a `429 RESOURCE_EXHAUSTED` error after 20 calls — not 1,000 as advertised. The same behaviour was observed for `gemini-2.5-flash`. This appears to be a new-project quota that applies before your account is established with Google.
+
+`gemini-3.1-flash-lite` confirmed 500 RPD via the AI Studio rate limits dashboard. This is the recommended free-tier model as of May 2026.
 
 Groq offers very high request volumes and exceptional speed (sub-100ms inference), but serves open-source models. For tasks requiring nuanced semantic reasoning — intent alignment, differentiation scoring, structured rubric output — open-source models at 7B–13B parameters may be less consistent than Gemini or Claude.
 
-**The free tier risk:** Google reduced free quotas by 50–80% in December 2025. Free tiers are not permanent entitlements — they can change. Build with the assumption that you may need to move to a paid tier if the project scales, and document the paid-tier fallback cost in your risk register.
+**⚠️ The critical rule: always verify actual limits in AI Studio before committing to a model.**
+
+Go to [aistudio.google.com](https://aistudio.google.com) → your project → Rate limits. The dashboard shows your actual RPD and RPM limits, and your live usage over the past 28 days. Documented limits and actual limits differ — especially for newer models on new projects. Discovering a 20 RPD cap mid-build, after designing the tool around a 1,000 RPD assumption, costs time and requires rework.
+
+**The free tier risk:** Google has reduced free quotas multiple times since 2024. Free tiers are not permanent entitlements — they can change. Build with the assumption that you may need to move to a paid tier if the project scales, and document the paid-tier fallback cost in your risk register.
 
 ---
 
@@ -128,9 +137,15 @@ Answer these questions in order:
 - Semantic reasoning → LLM required; question is which one
 
 **4. How many requests per day do you actually need?**
-- Under 250/day → Gemini Flash free tier is sufficient
-- 250–1,000/day → Gemini Flash-Lite free tier covers this
-- Over 1,000/day → you're beyond a solo portfolio project; evaluate paid tiers
+- Under 50/day → most free tier options work
+- 50–250/day → Gemini 3.1 Flash-Lite free tier (500 RPD confirmed)
+- 250–500/day → Gemini 3.1 Flash-Lite free tier at the upper bound — monitor in AI Studio
+- Over 500/day → paid tier required; at this volume you're beyond a solo portfolio project
+
+**4a. Have you verified the actual limits for your account?**
+- Go to AI Studio → Rate limits dashboard before finalising your model choice
+- Do not rely on documented limits — verify your actual project quota
+- If the model you planned to use shows a lower limit than expected, switch before building the tool around the wrong assumption
 
 **5. Is API consolidation a goal?**
 - If you're building multiple projects and want one API key across all of them, pick the free-tier provider first and only deviate when quality or limits demand it.
@@ -156,33 +171,34 @@ If the model fails on step 4, 5, or 6, move to a higher-capability model before 
 
 ### Google Gemini API (recommended for zero-cost solo builds)
 
-1. Go to [ai.google.dev](https://ai.google.dev)
+1. Go to [aistudio.google.com](https://aistudio.google.com)
 2. Sign in with a personal Google account
 3. Click "Get API key" — no credit card required
-4. Set the key as an environment variable: `GOOGLE_API_KEY=your_key`
+4. Check Rate limits dashboard — verify actual RPD for your target model before writing any code
+5. Set the key as an environment variable or Codespaces Secret
 
-**Python SDK:**
+**Python SDK — use `google-genai`, not `google-generativeai`:**
+
 ```bash
-pip install google-generativeai
+pip install google-genai
 ```
 
-**Basic call:**
+The older `google-generativeai` package is deprecated. It has a different import structure and API call format. Using it wastes debugging time.
+
+**Basic call (current SDK):**
 ```python
-import google.generativeai as genai
-genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-model = genai.GenerativeModel("gemini-2.5-flash-lite")
-response = model.generate_content("Your prompt here")
+from google import genai
+import os
+
+client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+response = client.models.generate_content(
+    model="gemini-3.1-flash-lite",
+    contents="Your prompt here"
+)
 print(response.text)
 ```
 
-**OpenAI-compatible endpoint** (useful if you want to swap providers easily):
-```python
-from openai import OpenAI
-client = OpenAI(
-    api_key=os.environ["GOOGLE_API_KEY"],
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-)
-```
+**Recommended model as of May 2026:** `gemini-3.1-flash-lite` — 500 RPD confirmed on free tier, 15 RPM, no credit card required.
 
 ### Streamlit secrets management (for deployed apps)
 
@@ -204,10 +220,11 @@ In Streamlit Community Cloud: add the key via the app's Secrets settings in the 
 
 If you're building multiple AI projects and want to minimise API overhead:
 
-1. **Start with Gemini free tier** across all projects — one account, one key, zero cost
-2. **Add a paid tier only when a specific project demands it** — don't pre-empt this
-3. **Use the OpenAI-compatible endpoint format** where possible — makes switching providers a one-line change
-4. **Document your fallback** in each project's risk register — if the free tier tightens, what's the paid-tier cost?
+1. **Start with Gemini free tier across all projects** — one account, one key, zero cost
+2. **Verify limits in AI Studio before designing each tool** — do not assume model limits carry over from previous projects or match documentation
+3. **Use `gemini-3.1-flash-lite` as your default free-tier model** — 500 RPD confirmed as of May 2026; avoids the 20 RPD trap in the 2.5 series
+4. **Add a paid tier only when a specific project demands it** — don't pre-empt this
+5. **Document your fallback in each project's risk register** — if the free tier tightens, what's the paid-tier cost and what code change is required?
 
 The goal is not to optimise every project independently. It's to have a stable, low-friction API layer that lets you focus on building, not on managing credentials and billing across five different providers.
 
@@ -215,8 +232,9 @@ The goal is not to optimise every project independently. It's to have a stable, 
 
 ## Further Reading
 
-- [Google AI Studio](https://aistudio.google.com) — API key setup, free tier
-- [Gemini API pricing](https://ai.google.dev/pricing) — current free tier limits
+- [Google AI Studio](https://aistudio.google.com) — API key setup, rate limits dashboard (check actual limits here)
+- [Gemini API pricing](https://ai.google.dev/pricing) — published free tier limits (verify against AI Studio)
+- [Building with the Gemini API in Python](./building_with_gemini_api_python.md) — practical code patterns from two real builds
 - [Ollama](https://ollama.com) — local model runner
 - [LM Studio](https://lmstudio.ai) — GUI-based local model runner
 - [Groq](https://groq.com) — free tier, high-speed open-source model inference
@@ -224,4 +242,4 @@ The goal is not to optimise every project independently. It's to have a stable, 
 
 ---
 
-*Written as part of my public AI learning journey. I am a Senior TPM and Designated PM at Microsoft AI, building real AI products and documenting what I learn. See the `llm-eval-toolkit` repo for a hands-on project applying these concepts.*
+*Written as part of my public AI learning journey. I am a Senior TPM and Designated PM at Microsoft AI, building real AI products and documenting what I learn. Built and validated across two projects: [llm-eval-toolkit](https://github.com/saurabh-das7/llm-eval-toolkit) and [llm-issue-categorizer](https://github.com/saurabh-das7/llm-issue-categorizer).*
