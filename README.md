@@ -62,7 +62,7 @@ These frameworks were developed and validated across two public projects:
 
 | Project | What it is |
 |---------|-----------|
-| [llm-eval-toolkit](https://github.com/saurabh-das7/llm-eval-toolkit) | Search Ad Copy Evaluator — Streamlit app evaluating LLM-generated ad copy against a structured rubric · [Live demo](https://llm-eval-toolkit-uwvrvxbgvcgwmk9rpbpjun.streamlit.app/) |
+| [llm-eval-toolkit](https://github.com/saurabh-das7/llm-eval-toolkit) | Search Ad Copy Evaluator — Streamlit app evaluating LLM-generated ad copy against a structured rubric |
 | [llm-issue-categorizer](https://github.com/saurabh-das7/llm-issue-categorizer) | Operational Ticket Categoriser — LLM-powered tool to re-categorise vendor tickets and surface product patterns |
 
 ## Status
