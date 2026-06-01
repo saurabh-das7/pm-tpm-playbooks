@@ -1,7 +1,7 @@
 # System Prompt Design for LLM Evaluation — A PM's Practical Guide
 
-*Part of my AI Learning Journey | Last updated: April 2026*
-*v1 — written during the design phase of the Search Ad Copy Evaluator project*
+*Part of my AI Learning Journey | Last updated: May 2026*
+*v2 — expanded with multi-pass and batch prompting patterns from llm-issue-categorizer*
 
 ---
 
@@ -9,7 +9,7 @@
 
 Building an LLM-as-judge evaluator is not just an engineering task. The system prompt is the product. It encodes the rubric, defines the scoring scale, controls output format, and determines how the model handles edge cases. A weak system prompt produces inconsistent, unreliable verdicts — which defeats the entire purpose of structured evaluation.
 
-This guide captures the principles and patterns for writing system prompts that produce rubric-based evaluation outputs reliably, drawn from designing a five-dimension ad copy evaluator in April 2026.
+This guide captures the principles and patterns for writing system prompts that produce rubric-based evaluation outputs reliably, drawn from two tools: a five-dimension search ad copy evaluator (llm-eval-toolkit) and a multi-pass operational ticket categoriser (llm-issue-categorizer).
 
 ---
 
@@ -245,6 +245,95 @@ Submit the same ad three times. Scores should not vary by more than 1 point per 
 | JSON format errors | Model returns prose with JSON embedded | Add: "Return valid JSON only. No text before or after the JSON object." |
 | Confident verdict on vague input | "AI tool" product description gets scored | Add explicit minimum input requirements to the insufficient input rule |
 | Cross-contamination | User instruction in ad copy affects scoring | Add prompt injection warning and use clear input delimiters |
+| Category drift across batches | Same concept gets different labels in different runs | Pass accumulated category list to every batch prompt |
+| Near-duplicate categories | "UPI PIN Reset" and "PIN Auth Failure" created as separate categories | Run a two-pass consolidation after categorisation completes |
+
+---
+
+## Multi-Pass Prompting (for Batch and Categorisation Tools)
+
+Single-turn prompts work for single-item evaluation (one ad, one rubric call). For tools that process many items across multiple batches — like a ticket categoriser processing 90 rows in 9 batches of 10 — prompt design gets more complex. Two patterns from llm-issue-categorizer that transfer to any batch evaluation tool:
+
+---
+
+### Pattern A — STAGE Labels for Sequential Reasoning
+
+When a single prompt requires the model to reason in multiple steps — generate, then evaluate, then summarise — label each step explicitly with STAGE markers. The model follows labelled stages more reliably than implicit sequencing.
+
+**Without STAGE labels (unreliable):**
+```
+Write a summary for each category, then identify merge opportunities,
+then write an overall narrative.
+```
+
+**With STAGE labels (reliable):**
+```
+STAGE A — Write a one-line summary for each category.
+STAGE B — Using the Stage A summaries, identify merge opportunities:
+  AUTO_MERGE: categories that are near-identical. State which to merge.
+  FLAG: categories that may overlap but you are uncertain. Flag only (max 3).
+STAGE C — Write a 2–3 sentence narrative summarising the full results.
+
+Return all three stages in a single JSON object.
+```
+
+The STAGE pattern works because it gives the model an explicit checkpoint at each step. It cannot skip Stage A and jump to Stage B — the label enforces the sequence.
+
+**Applies to:** Any prompt requiring sequential reasoning — evaluate then summarise, categorise then merge, score then explain.
+
+---
+
+### Pattern B — Accumulated Context Across Batches
+
+When processing many items in batches, the model will invent new labels for concepts it already categorised earlier — because it has no memory of previous batches. The fix is to pass the running list of categories already identified to every subsequent batch.
+
+**Prompt structure:**
+```
+Context: {context_description}
+
+Existing categories identified so far:
+{accumulated_category_list}
+
+Use one of the existing categories if it fits.
+Only create a new category if the ticket genuinely does not belong
+to any existing one.
+
+Tickets to categorise:
+{batch_of_tickets}
+```
+
+**Python pattern:**
+```python
+accumulated_cats = []
+
+for batch_num in range(total_batches):
+    cat_section = (
+        "Existing categories:\n" +
+        "\n".join(f"- {c}" for c in accumulated_cats)
+        if accumulated_cats
+        else "No categories yet — generate your own."
+    )
+    
+    prompt = f"""Context: {context}
+{cat_section}
+
+Categorise each ticket. Return JSON array only.
+
+Tickets:
+{json.dumps(batch, indent=2)}"""
+    
+    results = call_llm(prompt)
+    
+    # Add new categories to the running list
+    for r in results:
+        cat = r.get("category", "")
+        if cat and cat != "Uncategorised" and cat not in accumulated_cats:
+            accumulated_cats.append(cat)
+```
+
+**Why it works:** The model is now constrained to a known vocabulary. Category drift across batches drops to near zero.
+
+**What to watch:** If the accumulated list grows past ~15 categories, the model starts force-fitting tickets to avoid creating more. Add a bucket threshold — collapse any category below a minimum row count (e.g. 5 rows) into an "Uncategorised" bucket. Analyse that bucket separately.
 
 ---
 
@@ -326,9 +415,11 @@ OUTPUT: Return valid JSON only. No text before or after.
 ## Further Reading
 
 - [Rubric-Based LLM Evaluation Design](./rubric_based_llm_evaluation_design.md)
+- [LLM Output Consistency Design](./llm_output_consistency_design.md)
 - [LLM Evaluation — Problem Landscape for PMs](./llm_eval_problem_landscape.md)
+- [Building with the Gemini API in Python](./building_with_gemini_api_python.md)
 - [Google Gemini API documentation](https://ai.google.dev/gemini-api/docs)
 
 ---
 
-*Written as part of my public AI learning journey. I am a Senior TPM and Designated PM at Microsoft AI, building real AI products and documenting what I learn. See the `llm-eval-toolkit` repo for a hands-on project applying these concepts.*
+*Written as part of my public AI learning journey. I am a Senior TPM and Designated PM at Microsoft AI, building real AI products and documenting what I learn. Patterns validated across two builds: [llm-eval-toolkit](https://github.com/saurabh-das7/llm-eval-toolkit) and [llm-issue-categorizer](https://github.com/saurabh-das7/llm-issue-categorizer).*
